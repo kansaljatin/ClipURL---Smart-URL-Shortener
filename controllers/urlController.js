@@ -105,6 +105,10 @@ async function createShortUrl(req, res) {
         console.log('[createShortUrl] Invalid expiry date', expiry);
         return res.status(400).json({ error: 'Invalid expiry date' });
       }
+      if (exp.getTime() <= Date.now()) {
+        console.log('[createShortUrl] Expiry date is in the past', exp.toISOString());
+        return res.status(400).json({ error: 'Expiry must be in the future' });
+      }
       expiresAt = exp;
     }
 

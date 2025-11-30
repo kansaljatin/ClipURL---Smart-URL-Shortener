@@ -109,7 +109,7 @@
         const [longUrl, setLongUrl] = React.useState('');
         const [customAlias, setCustomAlias] = React.useState('');
         const [expiryDate, setExpiryDate] = React.useState('');
-        const [expiryTime, setExpiryTime] = React.useState('');
+        const [expiryTime, setExpiryTime] = React.useState('00:00:00');
         const [result, setResult] = React.useState(null);
         const [error, setError] = React.useState('');
         const [loading, setLoading] = React.useState(false);
@@ -129,7 +129,8 @@
             let expiryValue = undefined;
             if (expiryDate) {
               const timePart = expiryTime || '00:00:00';
-              expiryValue = `${expiryDate}T${timePart}`;
+              expiryValue = `${expiryDate}T${timePart}Z`;
+              console.log(expiryValue)
             }
 
             const res = await fetch('/api/shorten', {
@@ -200,7 +201,7 @@
                       />
                     </div>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: '0.75rem', marginBottom: '0.15rem', color: '#9ca3af' }}>Time (HH:MM:SS)</div>
+                      <div style={{ fontSize: '0.75rem', marginBottom: '0.15rem', color: '#9ca3af' }}>UTC Time (HH:MM:SS)</div>
                       <input
                         type="time"
                         step="1"
@@ -232,7 +233,7 @@
                   </a>
                 </div>
                 <div>Original: {result.longUrl}</div>
-                {result.expiresAt && <div>Expires at: {new Date(result.expiresAt).toLocaleString()}</div>}
+                {result.expiresAt && <div>Expires at (UTC): {new Date(result.expiresAt).toLocaleString("en-GB", { timeZone: "UTC" })}</div>}
               </div>
             )}
           </div>
