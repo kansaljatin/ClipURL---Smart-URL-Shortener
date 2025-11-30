@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ClipURL - Smart URL Shortener</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background: #0f172a;
+        color: #e5e7eb;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+      }
+      .container {
+        background: #020617;
+        padding: 2rem 2.5rem;
+        border-radius: 0.75rem;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+        max-width: 540px;
+        width: 100%;
+      }
+      h1 {
+        margin-top: 0;
+        margin-bottom: 0.75rem;
+        font-size: 1.6rem;
+      }
+      p {
+        margin-top: 0;
+        margin-bottom: 1.5rem;
+        color: #9ca3af;
+        font-size: 0.9rem;
+      }
+      label {
+        display: block;
+        font-size: 0.85rem;
+        margin-bottom: 0.35rem;
+        color: #e5e7eb;
+      }
+      input {
+        width: 100%;
+        padding: 0.55rem 0.7rem;
+        border-radius: 0.4rem;
+        border: 1px solid #374151;
+        background: #020617;
+        color: #f9fafb;
+        font-size: 0.9rem;
+        box-sizing: border-box;
+      }
+      input:focus {
+        outline: none;
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 1px #3b82f6;
+      }
+      .field {
+        margin-bottom: 0.9rem;
+      }
+      button {
+        width: 100%;
+        padding: 0.65rem 0.8rem;
+        border-radius: 0.4rem;
+        border: none;
+        background: #3b82f6;
+        color: white;
+        font-weight: 600;
+        cursor: pointer;
+        margin-top: 0.5rem;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: default;
+      }
+      .result {
+        margin-top: 1rem;
+        padding: 0.75rem 0.9rem;
+        background: #020617;
+        border-radius: 0.5rem;
+        border: 1px solid #1f2937;
+        font-size: 0.85rem;
+      }
+      .error {
+        margin-top: 0.75rem;
+        color: #f97373;
+        font-size: 0.8rem;
+      }
+      a.short-url {
+        color: #3b82f6;
+        word-break: break-all;
+        text-decoration: none;
+      }
+      a.short-url:hover {
+        text-decoration: underline;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script crossorigin src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+
+    <script type="text/babel">
+      function App() {
+        const [longUrl, setLongUrl] = React.useState('');
+        const [customAlias, setCustomAlias] = React.useState('');
+        const [expiryDate, setExpiryDate] = React.useState('');
+        const [expiryTime, setExpiryTime] = React.useState('');
+        const [result, setResult] = React.useState(null);
+        const [error, setError] = React.useState('');
+        const [loading, setLoading] = React.useState(false);
+
+        const handleSubmit = async (e) => {
+          e.preventDefault();
+          setError('');
+          setResult(null);
+
+          if (!longUrl.trim()) {
+            setError('Please enter a long URL');
+            return;
+          }
+
+          setLoading(true);
+          try {
+            let expiryValue = undefined;
+            if (expiryDate) {
+              const timePart = expiryTime || '00:00:00';
+              expiryValue = `${expiryDate}T${timePart}`;
+            }
+
+            const res = await fetch('/api/shorten', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                longUrl: longUrl.trim(),
+                customAlias: customAlias.trim() || undefined,
+                expiry: expiryValue,
+              }),
+            });
+
+            const data = await res.json();
+            if (!res.ok) {
+              setError(data.error || 'Failed to shorten URL');
+            } else {
+              setResult(data);
+            }
+          } catch (err) {
+            setError('Network error. Please try again.');
+          } finally {
+            setLoading(false);
+          }
+        };
+
+        return (
+          <div className="container">
+            <h1>ClipURL - Smart URL Shortener</h1>
+            <p>Shorten and manage your links with ClipURL. Add an optional custom alias and expiry to keep your URLs clean and under control.</p>
+
+            <form onSubmit={handleSubmit}>
+              <div className="field">
+                <label>Long URL *</label>
+                <input
+                  type="url"
+                  placeholder="https://example.com/very/long/url"
+                  value={longUrl}
+                  onChange={(e) => setLongUrl(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="field">
+                <label>
+                  Custom alias (optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="my-custom-alias"
+                  value={customAlias}
+                  onChange={(e) => setCustomAlias(e.target.value)}
+                />
+              </div>
+
+              <div className="field">
+                <label>Expiry (optional: date &amp; time)</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '0.75rem', marginBottom: '0.15rem', color: '#9ca3af' }}>Date</div>
+                      <input
+                        type="date"
+                        value={expiryDate}
+                        onChange={(e) => setExpiryDate(e.target.value)}
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '0.75rem', marginBottom: '0.15rem', color: '#9ca3af' }}>Time (HH:MM:SS)</div>
+                      <input
+                        type="time"
+                        step="1"
+                        value={expiryTime}
+                        onChange={(e) => setExpiryTime(e.target.value)}
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
+                    Choose the exact date and time when this ClipURL should stop working.
+                  </div>
+                </div>
+              </div>
+
+              <button type="submit" disabled={loading}>
+                {loading ? 'Shortening...' : 'Create short URL'}
+              </button>
+            </form>
+
+            {error && <div className="error">{error}</div>}
+
+            {result && (
+              <div className="result">
+                <div>
+                  Short URL:{' '}
+                  <a className="short-url" href={result.shortUrl} target="_blank" rel="noreferrer">
+                    {result.shortUrl}
+                  </a>
+                </div>
+                <div>Original: {result.longUrl}</div>
+                {result.expiresAt && <div>Expires at: {new Date(result.expiresAt).toLocaleString()}</div>}
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(<App />);
+    </script>
+  </body>
+</html>
