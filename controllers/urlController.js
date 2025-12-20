@@ -15,7 +15,7 @@ async function cacheUrlDoc(urlDoc) {
   const redis = getRedisClient();
   if (!redis) {
     console.log('[cacheUrlDoc] Redis client not initialised, skipping cache write');
-    return;
+    throw new Error('[cacheUrlDoc] Redis client not initialised, skipping cache write')
   }
 
   const key = `url:${urlDoc.code}`;
@@ -112,18 +112,7 @@ async function createShortUrl(req, res) {
       expiresAt = exp;
     }
 
-    const cachePayload = { code, longUrl, expiresAt };
-    const cacheKey = `url:${code}`;
-
-    // Write-through cache: write to cache first, then DB. Both must succeed.
-    try {
-      console.log('[createShortUrl] Writing to cache first for key', cacheKey);
-      await cacheUrlDoc(cachePayload);
-    } catch (cacheErr) {
-      console.error('[createShortUrl] Failed to write to cache, aborting write', cacheErr);
-      return res.status(500).json({ error: 'Failed to cache short URL' });
-    }
-
+    // First write to the source of truth (MongoDB)
     let urlDoc;
     try {
       if (existing) {
@@ -160,19 +149,7 @@ async function createShortUrl(req, res) {
           }
 
           // Conflict: same code but different URL (e.g., custom alias clash)
-          console.error(
-            '[createShortUrl] Duplicate key for different longUrl, rolling back cache for key',
-            cacheKey
-          );
-          try {
-            const redis = getRedisClient();
-            if (redis) {
-              await redis.del(cacheKey);
-            }
-          } catch (rollbackErr) {
-            console.error('[createShortUrl] Failed to rollback cache after 11000 error', rollbackErr);
-          }
-
+          console.error('[createShortUrl] Duplicate key for different longUrl');
           return res
             .status(409)
             .json({ error: 'Short code already exists, please try again with another alias' });
@@ -182,18 +159,16 @@ async function createShortUrl(req, res) {
         }
       }
 
-      // Non-duplicate-key DB error: rollback cache and return 500
-      console.error('[createShortUrl] DB write failed, rolling back cache for key', cacheKey, dbErr);
-      try {
-        const redis = getRedisClient();
-        if (redis) {
-          await redis.del(cacheKey);
-        }
-      } catch (rollbackErr) {
-        console.error('[createShortUrl] Failed to rollback cache after DB error', rollbackErr);
-      }
-
+      console.error('[createShortUrl] DB write failed', dbErr);
       return res.status(500).json({ error: 'Failed to save short URL' });
+    }
+
+    // Best-effort cache warmup: failure here does NOT affect the response
+    try {
+      console.log('[createShortUrl] Warming cache for code', urlDoc.code);
+      await cacheUrlDoc(urlDoc);
+    } catch (cacheErr) {
+      console.warn('[createShortUrl] Failed to warm cache, continuing without cache', cacheErr);
     }
 
     const shortUrl = `${req.protocol}://${req.get('host')}/${urlDoc.code}`;
@@ -269,8 +244,12 @@ async function redirectToLongUrl(req, res, next) {
     }
 
     // 3. Populate cache for subsequent reads
-    console.log('[redirectToLongUrl] Populating cache for key', cacheKey);
-    await cacheUrlDoc(urlDoc);
+    try {
+      console.log('[redirectToLongUrl] Populating cache for key', cacheKey);
+      await cacheUrlDoc(urlDoc);
+    } catch (cacheErr) {
+      console.warn('[redirectToLongUrl] Failed in Populating cache for key', cacheKey , cacheErr);
+    }
 
     console.log('[redirectToLongUrl] Redirecting to', urlDoc.longUrl);
     return res.redirect(urlDoc.longUrl);

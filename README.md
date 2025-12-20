@@ -43,8 +43,9 @@ ClipURL is a production-ready URL shortener with:
 - **Redis caching**
   - **Read path**: cache-aside.
     - Check Redis first; on miss, fall back to MongoDB and populate the cache.
-  - **Write path**: write-through (cache first, then DB).
-    - On DB failure, the cache entry is rolled back.
+  - **Write path**: DB-first with async cache warmup.
+    - Write to MongoDB (source of truth) and, on success, warm Redis in a best-effort way.
+    - Cache failures do not affect the HTTP response.
   - TTL in Redis respects `expiresAt` when provided.
 
 - **Autoscale-safe & idempotent create**
@@ -197,11 +198,11 @@ This route skips paths that look like static assets (e.g. containing `.`) so tha
 **Writes (create/update):**
 
 1. Generate deterministic code via SHA-256 + Base62 (`generateShortCode`).
-2. Write to cache first (write-through).
-3. Write to MongoDB.
+2. Write to MongoDB (source of truth).
+3. On success, warm Redis cache in a best-effort way.
 4. On Mongo duplicate key error (11000):
    - If existing doc has same `longUrl` → treat as success (idempotent across autoscaled instances).
-   - Else → treat as alias conflict (`409`) and roll back cache entry.
+   - Else → treat as alias conflict (`409`).
 
 ---
 
